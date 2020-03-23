@@ -1,0 +1,95 @@
+---
+title: "Network Graph Problem"
+author: "Steve Hojnicki"
+date: "1/31/2020"
+output: pdf_document
+---
+**Let's start by visualizing the problem. We will do this by creating a graphical depication of the problem drawing the nodes out as well as the arcs and their associated costs (miles * cost per mile).**
+
+
+```{r}
+library(igraph)
+library(magrittr)
+
+edgelist <- data.frame(
+    from = c(1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 7),
+    to = c(2, 3, 4, 7, 5, 6, 5, 7, 8, 4, 6, 8, 8, 8),
+    ID = seq(1, 14, 1),
+    capacity = c(300, 300, 300, 300, 300, 300, 150, 300, 300, 300, 300, 300, 300, 300),
+    cost = c(70*5, 56*5, 42*5, 79*5, 39*5, 85*5, 18*5, 40*5, 87*5, 18*5, 42*5, 97*5, 35*5, 25*5))
+
+g <- graph_from_edgelist(as.matrix(edgelist[,c('from','to')]))
+
+E(g)$capacity <- edgelist$capacity
+E(g)$cost <- edgelist$cost
+
+plot(g, edge.label = E(g)$cost, main = "Map of Network with costs per route")
+
+```
+
+**Next we will solve the linear program by feeding the function lp() from the package lpSolve. It requires four arguments to work properly. A min or max decision, a vector of objective function constants, a matrix of all lhs constraints, a vector of all the directional symbols for the constraints, and a vector of all rhs values in the constraints.**
+
+```{r}
+library(lpSolve)
+options(scipen = 10)
+f.obj <- c(70*5,56*5,42*5,79*5,39*5,85*5,18*5,40*5,87*5,18*5,42*5,97*5,35*5,25*5)
+f.con <- matrix(c(1,0,-1,-1,0,0,0,0,0,0,0,0,0,0, #Node 2 constraint
+                  0,1,0,0,-1,-1,0,0,0,0,0,0,0,0, #Node 3 constraint
+                  0,0,.95,0,0,0,-1,-1,-1,.95,0,0,0,0, #Node 4 constraint
+                  0,0,0,0,.95,0,.95,0,0,-1,-1,-1,0,0, #Node 5 constraint
+                  0,0,0,0,0,.95,0,0,0,0,.95,0,-1,0, #Node 6 constraint
+                  0,0,0,.95,0,0,0,.95,0,0,0,0,0,-1, #Node 7 constraint
+                  0,0,0,0,0,0,0,0,.95,0,0,.95,.95,.95, #Demand constraint
+                  1,0,0,0,0,0,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,1,0,0,0,0,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,1,0,0,0,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,1,0,0,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,1,0,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,1,0,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,1,0,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,1,0,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,1,0,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,0,1,0,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,0,0,1,0,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,1,0,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,0,1,0, #Arc capacity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,0,0,1, #Arc capacity constraint
+                  1,0,0,0,0,0,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,1,0,0,0,0,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,1,0,0,0,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,1,0,0,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,1,0,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,1,0,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,1,0,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,1,0,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,1,0,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,0,1,0,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,0,0,1,0,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,1,0,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,0,1,0, #Non negativity constraint
+                  0,0,0,0,0,0,0,0,0,0,0,0,0,1),nrow = 35, byrow = TRUE) #Non negativity constraint
+f.dir <- c("=","=",">=",">=",">=",">=",">=","<=","<=","<=","<=","<=","<=","<=","<=","<=","<=","<=","<=","<=","<=",">=",">=",">=",">=",">=",">=",">=",">=",">=",">=",">=",">=",">=",">=")
+f.rhs <- c(0,0,0,0,0,0,400,300,300,300,300,300,300,150,300,300,150,300,300,300,300,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+
+lp("min",f.obj,f.con,f.dir,f.rhs)
+round(lp("min",f.obj,f.con,f.dir,f.rhs)$solution, digits = 5)
+```
+
+**Now with the optimal answer we can plot the answer back on our chart.**
+
+
+```{r}
+edgelist <- data.frame(
+    from = c(1, 1, 2, 3, 6, 7),
+    to = c(2, 3, 7, 6, 8, 8),
+    ID = seq(1, 6),
+    capacity = c(300, 300, 300, 300, 300, 300),
+    result = c(300, 143.21, 300, 143.21, 136.05, 285))
+
+g <- graph_from_edgelist(as.matrix(edgelist[,c('from','to')]))
+
+E(g)$cost <- edgelist$result
+
+plot(g, edge.label = E(g)$cost, main = "Shipping Plan to Minimize Costs", xlim = c(-1,0))
+
+```
